@@ -66,8 +66,6 @@ Citizen.CreateThread(function()
 				else
 					Citizen.Trace("a1")
 
-					TriggerServerEvent("GolfPay")
-					
 					spawnCart()
 					TriggerEvent("customNotification","Press E to swing, A-D to rotate, Y to swap club.")
 				end
@@ -89,12 +87,9 @@ function spawnCart()
 	end
 	local spawned_car = CreateVehicle(vehicle, -1332.7823486328,128.18229675293,56.032329559326, 180, true, false)
 	SetVehicleOnGroundProperly(spawned_car)
-	SetVehicleNumberPlateText(spawned_car, "Caddy"..math.ceil(math.random(100)))
 	SetPedIntoVehicle(GetPlayerPed(-1), spawned_car, - 1)
 	SetModelAsNoLongerNeeded(vehicle)
 	plate = GetVehicleNumberPlateText(spawned_car)
-	TriggerEvent("keys:addNew",spawned_car,plate)
-
 end
 
 function DisplayHelpText(str)
