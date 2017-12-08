@@ -44,20 +44,22 @@ end)
 Citizen.CreateThread(function()
 	addblipGC()
 	while true do
-		Citizen.Wait(0)
-		local distance = GetDistanceBetweenCoords(-1332.7823486328,128.18229675293,57.032329559326, GetEntityCoords(GetPlayerPed(-1)), true)
-		if distance > 500.0 and golfplaying then
+		Citizen.Wait(1)
+		local playerLoc = GetEntityCoords(GetPlayerPed(-1))
+		local distance = GetDistanceBetweenCoords(-1332.7823486328,128.18229675293,56.032329559326, playerLoc.x,playerLoc.y,playerLoc.z, false)
+		--if distance < 30.0 then
+		DrawMarker(27,-1332.7823486328,128.18229675293,56.032329559326, 0, 0, 0, 0, 0, 0, 1.5, 1.5, 10.3, 0, 519, 0, 105, 0, 0, 2, 0, 0, 0, 0)
+		--end
+
+		if distance > 500 and golfplaying then
 			endgame()
 		end
-		if distance < 30.0 then
-			DrawMarker(27,-1332.7823486328,128.18229675293,56.032329559326, 0, 0, 0, 0, 0, 0, 1.5, 1.5, 10.3, 0, 519, 0, 105, 0, 0, 2, 0, 0, 0, 0)
-		end
-		if distance < 1.5 then 
+		if distance < 1.5 then
 
 			if golfplaying then
-				DisplayHelpText("Press ~g~E~s~ to end golf.") 
+				DisplayHelpText("Press ~g~~INPUT_CONTEXT~~s~ to end golf.")
 			else
-				DisplayHelpText("Press ~g~E~s~ to start golf ($100).") 
+				DisplayHelpText("Press ~g~~INPUT_CONTEXT~~s~ to start golf ($100).")
 			end
 			if (IsControlJustReleased(1, 38)) then
 
@@ -67,12 +69,13 @@ Citizen.CreateThread(function()
 					Citizen.Trace("a1")
 
 					spawnCart()
+					startGolf() -- If you plan to have it cost money, you need to remove this and only call it when they paid
 					TriggerEvent("customNotification","Press E to swing, A-D to rotate, Y to swap club.")
 				end
 			end
 			--if (IsControlJustPressed(1, 38) and golfplaying) then
 				--endgame()
-			--end			
+			--end
 		end
 	end
 end)
@@ -111,39 +114,38 @@ end
 
 function startGolf()
 	Citizen.Trace("Start Golf")
-	endgame()
+	--endgame()
 	StopAllScreenEffects()
 	--StartScreenEffect("MinigameTransitionIn", 5, 0);
 	inTask = false
-	SetCurrentPedWeapon(GetPlayerPed(-1), 0xA2719263) 
+	SetCurrentPedWeapon(GetPlayerPed(-1), 0xA2719263)
 	golfplaying = true
 	Citizen.Trace("3")
 	TriggerEvent("beginGolfHud")
 	Citizen.Trace("4")
-	while golfplaying do
-		Citizen.Wait(1000)
-		local distance = GetDistanceBetweenCoords(-1332.7823486328,128.18229675293,57.032329559326, GetEntityCoords(GetPlayerPed(-1)), true)
+	Citizen.CreateThread(function()
+		while golfplaying do
+			Citizen.Wait(1000)
+			local playerLoc = GetEntityCoords(GetPlayerPed(-1))
+			local distance = GetDistanceBetweenCoords(-1332.7823486328,128.18229675293,57.032329559326, playerLoc.x,playerLoc.y,playerLoc.z, false)
 
-		if distance > 500.0 then
-			endgame()
-		end
-
-		if ballstate == 1 then
-			golfhole = golfhole + 1
-			if golfhole == 10 then
-				endgame()
+			if ballstate == 1 then
+				golfhole = golfhole + 1
+				if golfhole == 10 then
+					endgame()
+				else
+					startHole()
+				end
 			else
-				startHole()
-			end
-		else
-			if golfstate == 2 and not inTask and not doingdrop then
-				idleShot()
-			elseif golfstate == 1 and not inTask and not doingdrop then
-				MoveToBall()
+				if golfstate == 2 and not inTask and not doingdrop then
+					idleShot()
+				elseif golfstate == 1 and not inTask and not doingdrop then
+					MoveToBall()
+				end
 			end
 		end
-	end
-	Citizen.InvokeNative(0xEA386986E786A54F, Citizen.PointerValueIntInitialized(spawned_car))
+		Citizen.InvokeNative(0xEA386986E786A54F, Citizen.PointerValueIntInitialized(spawned_car))
+	end)
 end
 
 function rotateShot(moveType)
@@ -161,7 +163,7 @@ end
 function createBall(x,y,z)
 	Citizen.Trace("Creating Ball")
 	DeleteObject(mygolfball)
-	mygolfball = CreateObject(GetHashKey("prop_golf_ball"), x, y, z, true, true, false) 
+	mygolfball = CreateObject(GetHashKey("prop_golf_ball"), x, y, z, true, true, false)
 
 	SetEntityRecordsCollisions(mygolfball,true)
 	addBallBlip()
@@ -178,7 +180,11 @@ function endgame()
 		RemoveBlip(startblip)
 		RemoveBlip(endblip)
 	end
-
+	if ballBlip ~= nil then
+		RemoveBlip(ballBlip)
+	end
+	removeAttachedProp()
+	DeleteObject(mygolfball)
 	Citizen.Trace("Ending Game")
 	golfhole = 0
 	golfstrokes = 0
@@ -195,16 +201,21 @@ function MoveToBall()
 	Citizen.Trace("Moving to Ball")
 	while golfstate == 1 do
 		Citizen.Wait(0)
-		local distance = GetDistanceBetweenCoords(GetEntityCoords(mygolfball), GetEntityCoords(GetPlayerPed(-1)), true)
+		if GetVehiclePedIsIn(GetPlayerPed(-1), false) == 0 then
+			local ballLoc = GetEntityCoords(mygolfball)
+			local playerLoc = GetEntityCoords(GetPlayerPed(-1))
+			local distance = GetDistanceBetweenCoords(ballLoc.x,ballLoc.y,ballLoc.z, playerLoc.x,playerLoc.y,playerLoc.z, true)
+			if distance < 50.0 then
+				DisplayHelpText("Move to your ball, press ~g~E~s~ to ball drop if you are stuck.")
+				if ( IsControlJustReleased(1, 38) ) then
+					dropShot()
+				end
 
-		DisplayHelpText("Move to your ball, press ~g~E~s~ to ball drop if you are stuck.") 
-		if ( IsControlJustReleased(1, 38) ) then
-			dropShot()
-		end
-
-		if (distance < 5.0) and not doingdrop then
-			golfstate = 2
-			ballstate = 0
+				if (distance < 5.0) and not doingdrop then
+					golfstate = 2
+					ballstate = 0
+				end
+			end
 		end
 	end
 end
@@ -214,17 +225,17 @@ function endShot()
 	TriggerEvent("attachItem","golfbag01")
 	inTask = false
 	golfstrokes = golfstrokes + 1
-
-	local distance = GetDistanceBetweenCoords(GetEntityCoords(mygolfball), holes[golfhole]["x2"],holes[golfhole]["y2"],holes[golfhole]["z2"], true)
+	local ballLoc = GetEntityCoords(mygolfball)
+	local distance = GetDistanceBetweenCoords(ballLoc.x,ballLoc.y,ballLoc.z, holes[golfhole]["x2"],holes[golfhole]["y2"],holes[golfhole]["z2"], true)
 	if distance < 1.5 then
 		TriggerEvent("customNotification","You got the ball with in range!")
-		totalgolfstrokes = golfstrokes + totalgolfstrokes		
+		totalgolfstrokes = golfstrokes + totalgolfstrokes
 		golfstrokes = 0
 		ballstate = 1
 	end
 	if golfstrokes > 12 then
 		TriggerEvent("customNotification","You took too many shots..")
-		totalgolfstrokes = golfstrokes + totalgolfstrokes		
+		totalgolfstrokes = golfstrokes + totalgolfstrokes
 		golfstrokes = 0
 		ballstate = 1
 	end
@@ -237,7 +248,7 @@ function dropShot()
 	Citizen.Trace("Droping Shot")
 	doingdrop = true
 	while doingdrop do
-		
+
 		Citizen.Wait(0)
 		local distance = GetDistanceBetweenCoords(GetEntityCoords(mygolfball), GetEntityCoords(GetPlayerPed(-1)), true)
 		local distanceHole = GetDistanceBetweenCoords(holes[golfhole]["x2"],holes[golfhole]["y2"],holes[golfhole]["z2"], GetEntityCoords(GetPlayerPed(-1)), true)
@@ -245,12 +256,12 @@ function dropShot()
 			DisplayHelpText("Press ~g~E~s~ to drop here.")
 			if ( IsControlJustReleased(1, 38) ) then
 				doingdrop = false
-				x,y,z = table.unpack(GetEntityCoords(GetPlayerPed(-1))) 
+				x,y,z = table.unpack(GetEntityCoords(GetPlayerPed(-1)))
 				createBall(x,y,z-1)
 				golfstrokes = golfstrokes + 1
-			end			
+			end
 		else
-			DisplayHelpText("Press ~g~E~s~ to drop - ~r~ too far from ball or to close to hole.") 
+			DisplayHelpText("Press ~g~E~s~ to drop - ~r~ too far from ball or to close to hole.")
 		end
 	end
 end
@@ -261,21 +272,21 @@ function attachClub()
 	if golfclub == 3 then
 		TriggerEvent("attachItem","golfdriver01")
 		clubname = "Wood"
-	elseif golfclub == 2 then 
+	elseif golfclub == 2 then
 		TriggerEvent("attachItem","golfwedge01")
 		clubname = "Wedge"
-	elseif golfclub == 1 then 
+	elseif golfclub == 1 then
 		TriggerEvent("attachItem","golfiron01")
 		clubname = "1 Iron"
-	elseif golfclub == 4 then 
+	elseif golfclub == 4 then
 		TriggerEvent("attachItem","golfiron03")
 		clubname = "3 Iron"
-	elseif golfclub == 5 then 
+	elseif golfclub == 5 then
 		TriggerEvent("attachItem","golfiron05")
 		clubname = "5 Iron"
-	elseif golfclub == 6 then 
+	elseif golfclub == 6 then
 		TriggerEvent("attachItem","golfiron07")
-		clubname = "7 Iron"						
+		clubname = "7 Iron"
 	else
 		TriggerEvent("attachItem","golfputter01")
 		clubname = "Putter"
@@ -283,13 +294,13 @@ function attachClub()
 end
 
 function addBallBlip()
-	local blip = AddBlipForEntity(mygolfball)
-	SetBlipAsFriendly(blip, true)
-	SetBlipSprite(blip, 161)
+	ballBlip = AddBlipForEntity(mygolfball)
+	SetBlipAsFriendly(ballBlip, true)
+	SetBlipSprite(ballBlip, 161)
 	BeginTextCommandSetBlipName("STRING");
 	AddTextComponentString(tostring("Ball"))
-	EndTextCommandSetBlipName(blip)
-end		
+	EndTextCommandSetBlipName(ballBlip)
+end
 
 function drawGolfTxt(x,y ,width,height,scale, text, r,g,b,a)
     SetTextFont(2)
@@ -302,7 +313,7 @@ function drawGolfTxt(x,y ,width,height,scale, text, r,g,b,a)
     SetTextOutline()
     SetTextEntry("STRING")
     AddTextComponentString(text)
-    DrawText(x - width/2, y - height/2 + 0.005)
+    DrawText(x - width/2, y - height/2 + 0.025)
 end
 
 function idleShot()
@@ -343,7 +354,7 @@ function idleShot()
 			end
 			if power > 75 then
 				addition = addition + 0.3
-			end			
+			end
 			power = power + addition
 			if power > 100.0 then
 				power = 1.0
@@ -400,7 +411,7 @@ function idleShot()
 			AttachEntityToEntity(GetPlayerPed(-1), mygolfball, 20, 0.4, -0.83, 0.94, 0.0, 0.0, 0.0, false, false, false, false, 1, true)
 		end
 		if (IsControlJustReleased(1, 38)) then
-			if golfclub == 0 then	
+			if golfclub == 0 then
 				playAnim = puttSwing["puttswinglow"]
 			else
 				playAnim = ironSwing["ironswinghigh"]
@@ -409,10 +420,10 @@ function idleShot()
 				playGolfAnim(playAnim)
 				playAnim = ironSwing["ironswinglow"]
 			end
-	
+
 			golfstate = 1
 			inLoop = false
-			DetachEntity(GetPlayerPed(-1), true, false)	
+			DetachEntity(GetPlayerPed(-1), true, false)
 		else
 			if not inLoop then
 				TriggerEvent("loopStart")
@@ -422,13 +433,13 @@ function idleShot()
 
 	PlaySoundFromEntity(-1, "GOLF_SWING_FAIRWAY_IRON_LIGHT_MASTER", GetPlayerPed(-1), 0, 0, 0)
 
-	playGolfAnim(playAnim)	
+	playGolfAnim(playAnim)
 	swing()
 
 	Citizen.Wait(3380)
 	endShot()
 end
---DetachEntity(GetPlayerPed(-1), true, false)	
+--DetachEntity(GetPlayerPed(-1), true, false)
 
 
 function swing()
@@ -496,9 +507,9 @@ function swing()
 	elseif golfclub == 6 then -- iron 7 -- 50m-100m
 		power = power * 1.7
 		airpower = power / 2.45
-		enabledroll = true	
-		rollpower = rollpower / 6.0					
-	end 
+		enabledroll = true
+		rollpower = rollpower / 6.0
+	end
 
 	while power > 0 do
 		SetEntityVelocity(mygolfball, x*power,y*power,airpower)
@@ -522,7 +533,7 @@ function swing()
 		ballCamOff()
 	end
 	local x,y,z = table.unpack(GetEntityCoords(mygolfball))
-	createBall(x,y,z)	
+	createBall(x,y,z)
 	--SetEntityCoords(GetPlayerPed(-1),GetEntityCoords(mygolfball))
 	FreezeEntityPosition(mygolfball, true)
 end
@@ -554,7 +565,7 @@ function quickmafs(dir)
 
 	if dir > 270.0 and dir <= 360.0 then
 		dirp = dir - 270.0
-		local factor = (dirp/9.2) / 10	
+		local factor = (dirp/9.2) / 10
 		x = 0.0 - factor
 		y = 1.0 - factor
 	end
@@ -576,10 +587,10 @@ function idleLoop()
 		playAnim = puttSwing["puttidle"]
 	else
 		if (IsControlPressed(1, 38)) then
-			playAnim = ironSwing["ironidlehigh"]	
+			playAnim = ironSwing["ironidlehigh"]
 		else
-			playAnim = ironSwing["ironidle"]	
-		end		
+			playAnim = ironSwing["ironidle"]
+		end
 	end
 	playGolfAnim(playAnim)
 	Citizen.Wait(1200)
@@ -604,7 +615,7 @@ function playGolfAnim(anim)
 
 	else
 		length = GetAnimDuration("mini@golf", anim)
-		TaskPlayAnim( GetPlayerPed(-1), "mini@golf", anim, 1.0, -1.0, length, 0, 1, 0, 0, 0) 
+		TaskPlayAnim( GetPlayerPed(-1), "mini@golf", anim, 1.0, -1.0, length, 0, 1, 0, 0, 0)
 		Citizen.Wait(length)
 	end
 --	ClearPedSecondaryTask(GetPlayerPed(-1))
@@ -625,7 +636,7 @@ AddEventHandler('camFollowBall', function()
 	local timer = 20000
 	while timer > 0 do
 		Citizen.Wait(5)
-		x,y,z = table.unpack(GetEntityCoords(mygolfball)) 
+		x,y,z = table.unpack(GetEntityCoords(mygolfball))
 		SetCamCoord(ballcam, x,y-10,z+9)
 		PointCamAtEntity(ballcam, mygolfball, 0.0, 0.0, 0.0, true)
 		timer = timer - 1
@@ -694,7 +705,7 @@ function BlipsStartEnd()
 	AddTextComponentString(tostring("End of Hole"))
 	EndTextCommandSetBlipName(endblip)
 	createBall(holes[golfhole]["x"],holes[golfhole]["y"],holes[golfhole]["z"])
-end	
+end
 
 
 function addblipGC()
@@ -754,7 +765,7 @@ sounds = {
 	[26] = "GOLF_SWING_CHIP_SAND_MASTER",
 	[27] = "GOLF_SWING_PUTT_MASTER",
 	[28] = "GOLF_FORWARD_SWING_HARD_MASTER",
-	[29] = "GOLF_BACK_SWING_HARD_MASTER"	
+	[29] = "GOLF_BACK_SWING_HARD_MASTER"
 }
 
 
@@ -762,10 +773,6 @@ function removeAttachedProp()
 	DeleteEntity(attachedProp)
 	attachedProp = 0
 end
-
-
-
-
 
 
 -- attach bull shit
@@ -785,7 +792,7 @@ AddEventHandler('attachProp', function(attachModelSent,boneNumberSent,x,y,z,xR,y
 	removeAttachedProp()
 	attachModel = GetHashKey(attachModelSent)
 	boneNumber = boneNumberSent
-	SetCurrentPedWeapon(GetPlayerPed(-1), 0xA2719263) 
+	SetCurrentPedWeapon(GetPlayerPed(-1), 0xA2719263)
 	local bone = GetPedBoneIndex(GetPlayerPed(-1), boneNumberSent)
 	--local x,y,z = table.unpack(GetEntityCoords(GetPlayerPed(-1), true))
 	RequestModel(attachModel)
@@ -798,37 +805,38 @@ end)
 
 attachPropList = {
 
-	["golfbag01"] = { 
-		["model"] = "prop_golf_bag_01", ["bone"] = 24816, ["x"] = 0.12,["y"] = -0.3,["z"] = 0.0,["xR"] = -75.0,["yR"] = 190.0, ["zR"] = 92.0 
+	["golfbag01"] = {
+		["model"] = "prop_golf_bag_01", ["bone"] = 24816, ["x"] = 0.12,["y"] = -0.3,["z"] = 0.0,["xR"] = -75.0,["yR"] = 190.0, ["zR"] = 92.0
 	},
 
-	["golfputter01"] = { 
-		["model"] = "prop_golf_putter_01", ["bone"] = 57005, ["x"] = 0.0,["y"] = -0.05,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0 
+	["golfputter01"] = {
+		["model"] = "prop_golf_putter_01", ["bone"] = 57005, ["x"] = 0.0,["y"] = -0.05,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0
 	},
 
-	["golfiron01"] = { 
-		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.125,["y"] = 0.04,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0 
+	["golfiron01"] = {
+		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.125,["y"] = 0.04,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0
 	},
-	["golfiron03"] = { 
-		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.126,["y"] = 0.041,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0 
+	["golfiron03"] = {
+		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.126,["y"] = 0.041,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0
 	},
-	["golfiron05"] = { 
-		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.127,["y"] = 0.042,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0 
+	["golfiron05"] = {
+		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.127,["y"] = 0.042,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0
 	},
-	["golfiron07"] = { 
-		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.128,["y"] = 0.043,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0 
-	},		
-	["golfwedge01"] = { 
-		["model"] = "prop_golf_pitcher_01", ["bone"] = 57005, ["x"] = 0.17,["y"] = 0.04,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0 
+	["golfiron07"] = {
+		["model"] = "prop_golf_iron_01", ["bone"] = 57005, ["x"] = 0.128,["y"] = 0.043,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0
+	},
+	["golfwedge01"] = {
+		["model"] = "prop_golf_pitcher_01", ["bone"] = 57005, ["x"] = 0.17,["y"] = 0.04,["z"] = 0.0,["xR"] = 90.0,["yR"] = -118.0, ["zR"] = 44.0
 	},
 
-	["golfdriver01"] = { 
-		["model"] = "prop_golf_driver", ["bone"] = 57005, ["x"] = 0.14,["y"] = 0.00,["z"] = 0.0,["xR"] = 160.0,["yR"] = -60.0, ["zR"] = 10.0 
+	["golfdriver01"] = {
+		["model"] = "prop_golf_driver", ["bone"] = 57005, ["x"] = 0.14,["y"] = 0.00,["z"] = 0.0,["xR"] = 160.0,["yR"] = -60.0, ["zR"] = 10.0
 	}
-	
+
 }
 
 RegisterNetEvent('attachItem')
 AddEventHandler('attachItem', function(item)
 	TriggerEvent("attachProp",attachPropList[item]["model"], attachPropList[item]["bone"], attachPropList[item]["x"], attachPropList[item]["y"], attachPropList[item]["z"], attachPropList[item]["xR"], attachPropList[item]["yR"], attachPropList[item]["zR"])
 end)
+
